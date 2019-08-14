@@ -43,13 +43,14 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=str, default='0.001')
     parser.add_argument('--tag', type=str, default='test')
     parser.add_argument('--checkpoint', type=str, default='')
+    parser.add_argument('--modelpath', type=str, default='./models/train/')
 
     parser.add_argument('--input-width', type=int, default=432)
     parser.add_argument('--input-height', type=int, default=368)
     parser.add_argument('--quant-delay', type=int, default=-1)
     args = parser.parse_args()
 
-    modelpath = logpath = './models/train/'
+    modelpath = logpath = args.modelpath
 
     if args.gpus <= 0:
         raise Exception('gpus <= 0')
