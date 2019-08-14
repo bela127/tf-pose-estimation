@@ -67,13 +67,17 @@ if __name__ == '__main__':
 
     logger.info('define model+')
     with tf.device(tf.DeviceSpec(device_type="CPU")):
-        input_node = tf.placeholder(tf.float32, shape=(args.batchsize, args.input_height, args.input_width, 3), name='image')
-        vectmap_node = tf.placeholder(tf.float32, shape=(args.batchsize, output_h, output_w, 38), name='vectmap')
-        heatmap_node = tf.placeholder(tf.float32, shape=(args.batchsize, output_h, output_w, 19), name='heatmap')
+        #TODO Change to variable batch size
+        #for multy gpu set preprocessing batchsize to gpu_count * batchsize
+        input_node_queue = tf.placeholder(tf.float32, shape=(args.batchsize*args.gpus, args.input_height, args.input_width, 3), name='image_queue')
+        vectmap_node_queue = tf.placeholder(tf.float32, shape=(args.batchsize*args.gpus, output_h, output_w, 38), name='vectmap_queue')
+        heatmap_node_queue = tf.placeholder(tf.float32, shape=(args.batchsize*args.gpus, output_h, output_w, 19), name='heatmap_queue')
 
+        #TODO for multy gpu set preprocessing batchsize to gpu_count * batchsize
+        #so preprocessed batches split for each gpu = batchsize
         # prepare data
-        df = get_dataflow_batch(args.datapath, True, args.batchsize, img_path=args.imgpath)
-        enqueuer = DataFlowToQueue(df, [input_node, heatmap_node, vectmap_node], queue_size=100)
+        df = get_dataflow_batch(args.datapath, True, args.batchsize*args.gpus, img_path=args.imgpath)
+        enqueuer = DataFlowToQueue(df, [input_node_queue, heatmap_node_queue, vectmap_node_queue], queue_size=100)
         q_inp, q_heat, q_vect = enqueuer.dequeue()
 
     df_valid = get_dataflow_batch(args.datapath, False, args.batchsize, img_path=args.imgpath)
@@ -87,7 +91,13 @@ if __name__ == '__main__':
     logger.debug(q_vect)
 
     # define model for multi-gpu
-    q_inp_split, q_heat_split, q_vect_split = tf.split(q_inp, args.gpus), tf.split(q_heat, args.gpus), tf.split(q_vect, args.gpus)
+    # TODO split only works if batchsize dividable by gpu count (4)
+    # no works for every count till preprocessing batchsize = gpu_count * batchsize
+    input_node = tf.placeholder(tf.float32, shape=(None, args.input_height, args.input_width, 3), name='image')
+    vectmap_node = tf.placeholder(tf.float32, shape=(None, output_h, output_w, 38), name='vectmap')
+    heatmap_node = tf.placeholder(tf.float32, shape=(None, output_h, output_w, 19), name='heatmap')
+
+    q_inp_split, q_heat_split, q_vect_split = tf.split(input_node, args.gpus), tf.split(heatmap_node, args.gpus), tf.split(vectmap_node, args.gpus)
 
     output_vectmap = []
     output_heatmap = []
@@ -119,13 +129,13 @@ if __name__ == '__main__':
 
     with tf.device(tf.DeviceSpec(device_type="GPU")):
         # define loss
-        total_loss = tf.reduce_sum(losses) / args.batchsize
-        total_loss_ll_paf = tf.reduce_sum(last_losses_l1) / args.batchsize
-        total_loss_ll_heat = tf.reduce_sum(last_losses_l2) / args.batchsize
+        total_loss = tf.reduce_sum(losses) / (args.batchsize * args.gpus)
+        total_loss_ll_paf = tf.reduce_sum(last_losses_l1) / (args.batchsize * args.gpus)
+        total_loss_ll_heat = tf.reduce_sum(last_losses_l2) / (args.batchsize * args.gpus)
         total_loss_ll = tf.reduce_sum([total_loss_ll_paf, total_loss_ll_heat])
 
         # define optimizer
-        step_per_epoch = 121745 // args.batchsize
+        step_per_epoch = 121745 // (args.batchsize * args.gpus)
         global_step = tf.Variable(0, trainable=False)
         if ',' not in args.lr:
             starter_learning_rate = float(args.lr)
@@ -163,15 +173,17 @@ if __name__ == '__main__':
     valid_loss_ll = tf.placeholder(tf.float32, shape=[])
     valid_loss_ll_paf = tf.placeholder(tf.float32, shape=[])
     valid_loss_ll_heat = tf.placeholder(tf.float32, shape=[])
-    sample_train = tf.placeholder(tf.float32, shape=(4, 640, 640, 3))
-    sample_valid = tf.placeholder(tf.float32, shape=(12, 640, 640, 3))
+    #TODO hardcoded size
+    # replaced with None vor variable size
+    sample_train = tf.placeholder(tf.float32, shape=(None, 640, 640, 3))
+    sample_valid = tf.placeholder(tf.float32, shape=(None, 640, 640, 3))
     train_img = tf.summary.image('training sample', sample_train, 4)
     valid_img = tf.summary.image('validation sample', sample_valid, 12)
     valid_loss_t = tf.summary.scalar("loss_valid", valid_loss)
     valid_loss_ll_t = tf.summary.scalar("loss_valid_lastlayer", valid_loss_ll)
     merged_validate_op = tf.summary.merge([train_img, valid_img, valid_loss_t, valid_loss_ll_t])
 
-    saver = tf.train.Saver(max_to_keep=1000)
+    saver = tf.train.Saver(max_to_keep=5000)
     config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
     config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
@@ -213,14 +225,19 @@ if __name__ == '__main__':
 
         last_log_epoch1 = last_log_epoch2 = -1
         while True:
-            _, gs_num = sess.run([train_op, global_step])
+            q_inp_data, q_heat_data, q_vect_data = sess.run([q_inp, q_heat, q_vect])
+            _, gs_num = sess.run([train_op, global_step],
+                feed_dict={input_node: q_inp_data, vectmap_node: q_vect_data, heatmap_node: q_heat_data}
+            )
             curr_epoch = float(gs_num) / step_per_epoch
 
             if gs_num > step_per_epoch * args.max_epoch:
                 break
 
             if gs_num - last_gs_num >= 500:
-                train_loss, train_loss_ll, train_loss_ll_paf, train_loss_ll_heat, lr_val, summary = sess.run([total_loss, total_loss_ll, total_loss_ll_paf, total_loss_ll_heat, learning_rate, merged_summary_op])
+                train_loss, train_loss_ll, train_loss_ll_paf, train_loss_ll_heat, lr_val, summary = sess.run([total_loss, total_loss_ll, total_loss_ll_paf, total_loss_ll_heat, learning_rate, merged_summary_op], 
+                    feed_dict={input_node: q_inp_data, vectmap_node: q_vect_data, heatmap_node: q_heat_data}
+                )
 
                 # log of training loss / accuracy
                 batch_per_sec = (gs_num - initial_gs_num) / (time.time() - time_started)
@@ -249,7 +266,7 @@ if __name__ == '__main__':
                 for images_test, heatmaps, vectmaps in validation_cache:
                     lss, lss_ll, lss_ll_paf, lss_ll_heat, vectmap_sample, heatmap_sample = sess.run(
                         [total_loss, total_loss_ll, total_loss_ll_paf, total_loss_ll_heat, output_vectmap, output_heatmap],
-                        feed_dict={q_inp: images_test, q_vect: vectmaps, q_heat: heatmaps}
+                        feed_dict={input_node: images_test, vectmap_node: vectmaps, heatmap_node: heatmaps}
                     )
                     average_loss += lss * len(images_test)
                     average_loss_ll += lss_ll * len(images_test)
@@ -260,35 +277,43 @@ if __name__ == '__main__':
                 logger.info('validation(%d) %s loss=%f, loss_ll=%f, loss_ll_paf=%f, loss_ll_heat=%f' % (total_cnt, args.tag, average_loss / total_cnt, average_loss_ll / total_cnt, average_loss_ll_paf / total_cnt, average_loss_ll_heat / total_cnt))
                 last_gs_num2 = gs_num
 
+                #TODO somthing wrong here max(1, (args.batchsize // 16) -> batchgröße vielfaches von 16
+                # 4 sample_image + 12 val_image = 16 images 
+                # n mal um batchsize zu erreichen -> aufgerunded batchgröße/bildzahl -> mehr als batchgröße wegen ceil
+                # die ersten batchsize elemente nutzen
+                ### Change to variable batch size
+                # only use 16 image batches
                 sample_image = [enqueuer.last_dp[0][i] for i in range(4)]
+                test_image = np.array((sample_image + val_image)*args.gpus)
                 outputMat = sess.run(
                     outputs,
-                    feed_dict={q_inp: np.array((sample_image + val_image) * max(1, (args.batchsize // 16)))}
+                    feed_dict={input_node: test_image}
                 )
                 pafMat, heatMat = outputMat[:, :, :, 19:], outputMat[:, :, :, :19]
-
-                sample_results = []
-                for i in range(len(sample_image)):
-                    test_result = CocoPose.display_image(sample_image[i], heatMat[i], pafMat[i], as_numpy=True)
-                    test_result = cv2.resize(test_result, (640, 640))
-                    test_result = test_result.reshape([640, 640, 3]).astype(float)
-                    sample_results.append(test_result)
-
+                
+                #TODO not right size
+                #take the min length batchsize vs sample images
+                ## solved with var batchsize
                 test_results = []
-                for i in range(len(val_image)):
-                    test_result = CocoPose.display_image(val_image[i], heatMat[len(sample_image) + i], pafMat[len(sample_image) + i], as_numpy=True)
+                for image,heat,paf in zip(test_image, heatMat, pafMat):
+                    test_result = CocoPose.display_image(image, heat, paf, as_numpy=True)
                     test_result = cv2.resize(test_result, (640, 640))
                     test_result = test_result.reshape([640, 640, 3]).astype(float)
                     test_results.append(test_result)
+                
+                train_results = test_results[:4]
+                val_results = test_results[4:16]
 
                 # save summary
+                #TODO not right size
+                ## solved var batchsize
                 summary = sess.run(merged_validate_op, feed_dict={
                     valid_loss: average_loss / total_cnt,
                     valid_loss_ll: average_loss_ll / total_cnt,
                     valid_loss_ll_paf: average_loss_ll_paf / total_cnt,
                     valid_loss_ll_heat: average_loss_ll_heat / total_cnt,
-                    sample_valid: test_results,
-                    sample_train: sample_results
+                    sample_valid: val_results,
+                    sample_train: train_results
                 })
                 if last_log_epoch2 < curr_epoch:
                     file_writer.add_summary(summary, curr_epoch)
