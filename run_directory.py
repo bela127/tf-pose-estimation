@@ -42,14 +42,13 @@ if __name__ == '__main__':
         # estimate human poses from a single image !
         image = common.read_imgfile(file, None, None)
         t = time.time()
-        humans = e.inference(image, scales=scales)
+        humans = e.inference(image)
         elapsed = time.time() - t
 
         logger.info('inference image #%d: %s in %.4f seconds.' % (i, file, elapsed))
 
-        image = TfPoseEstimator.draw_humans(image, humans, imgcopy=False)
-        cv2.imshow('tf-pose-estimation result', image)
-        cv2.waitKey(5)
+        image_infer = TfPoseEstimator.draw_humans(image, humans, imgcopy=False)
+        cv2.imwrite(os.path.join('infer', file.replace(args.folder, '')), image_infer)
 
         all_humans[file.replace(args.folder, '')] = humans
 
