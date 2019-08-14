@@ -16,6 +16,12 @@ from pose_augment import set_network_input_wh, set_network_scale
 from common import get_sample_images
 from networks import get_network
 
+import sys
+
+if not sys.warnoptions:
+    import warnings
+    warnings.simplefilter("ignore")
+
 logger = logging.getLogger('train')
 logger.handlers.clear()
 logger.setLevel(logging.DEBUG)
