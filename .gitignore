@@ -121,3 +121,4 @@ src/pafprocess/pafprocess_wrap.cxx
 images/pose.dil
 data/
 infer/
+models/training/
