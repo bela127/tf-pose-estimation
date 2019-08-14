@@ -407,6 +407,9 @@ class DataFlowToQueue(threading.Thread):
 
         self.ds = ds
         self.placeholders = placeholders
+        #TODO allow diffrent shaped batches
+        #set placeholders to "on element batches"
+        #use deque many
         self.queue = tf.FIFOQueue(queue_size, [ph.dtype for ph in placeholders], shapes=[ph.get_shape() for ph in placeholders])
         self.op = self.queue.enqueue(placeholders)
         self.close_op = self.queue.close(cancel_pending_enqueues=True)
