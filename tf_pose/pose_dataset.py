@@ -468,6 +468,10 @@ class DataFlowToQueue(threading.Thread):
     def dequeue(self):
         return self.queue.dequeue()
 
+    def dequeue_many(n):
+        return self.queue.dequeue_many(n)
+    
+
 
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
