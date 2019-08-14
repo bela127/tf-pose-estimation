@@ -122,3 +122,4 @@ images/pose.dil
 data/
 infer/
 models/training/
+tf_pose/pafprocess/pafprocess_wrap.cxx
