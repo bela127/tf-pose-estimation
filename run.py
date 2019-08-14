@@ -24,7 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--image', type=str, default='./images/p1.jpg')
     parser.add_argument('--model', type=str, default='cmu',
                         help='cmu / mobilenet_thin / mobilenet_v2_large / mobilenet_v2_small')
-    parser.add_argument('--resize', type=str, default='0x0',
+    parser.add_argument('--resize', type=str, default='432x368',
                         help='if provided, resize images before they are processed. '
                              'default=0x0, Recommends : 432x368 or 656x368 or 1312x736 ')
     parser.add_argument('--resize-out-ratio', type=float, default=4.0,
@@ -33,10 +33,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     w, h = model_wh(args.resize)
-    if w == 0 or h == 0:
-        e = TfPoseEstimator(get_graph_path(args.model), target_size=(432, 368))
-    else:
-        e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
+
+    e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
 
     # estimate human poses from a single image !
     image = common.read_imgfile(args.image, None, None)
