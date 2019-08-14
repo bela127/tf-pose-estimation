@@ -198,7 +198,8 @@ def pose_flip(meta):
 
 
 def pose_rotation(meta):
-    deg = random.uniform(-15.0, 15.0)
+    #TODO rotationswinkel orginal: random.uniform(-15.0, 15.0)
+    deg = random.uniform(-180.0, 180.0)
     img = meta.img
 
     center = (img.shape[1] * 0.5, img.shape[0] * 0.5)       # x, y
