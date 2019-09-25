@@ -28,17 +28,18 @@ if __name__ == '__main__':
     parser.add_argument('--folder', type=str, default='./images/')
     parser.add_argument('--resolution', type=str, default='432x368', help='network input resolution. default=432x368')
     parser.add_argument('--model', type=str, default='cmu', help='cmu / mobilenet_thin / mobilenet_v2_large / mobilenet_v2_small')
-    parser.add_argument('--resize', type=str, default='432x368',
-    help='if provided, resize images before they are processed. '
-         'default=0x0, Recommends : 432x368 or 656x368 or 1312x736 ')
     parser.add_argument('--resize-out-ratio', type=float, default=4.0,
     help='if provided, resize heatmaps before they are post-processed. default=1.0')
+    parser.add_argument('--pb_path', type=str, default='')
 
     args = parser.parse_args()
 
     w, h = model_wh(args.resolution)
-    
-    e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
+
+    if args.pb_path:
+        e = TfPoseEstimator(args.pb_path, target_size=(w, h))
+    else:
+        e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
 
     image_files = []
     path = args.folder
