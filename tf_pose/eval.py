@@ -98,7 +98,7 @@ if __name__ == '__main__':
         img_name = os.path.join(image_dir, img_meta['file_name'])
         image = read_imgfile(img_name, None, None)
         if image is None:
-            logger.error('image not found, path=%s' % img_name)
+            logger.error('image not found, path=%s', img_name)
             sys.exit(-1)
 
         # inference the image with the specified network
@@ -122,7 +122,7 @@ if __name__ == '__main__':
         avg_score = scores / len(humans) if len(humans) > 0 else 0
         tqdm_keys.set_postfix(OrderedDict({'inference time': elapsed, 'score': avg_score}))
         if args.data_idx >= 0:
-            logger.info('score:', k, len(humans), len(anns), avg_score)
+            logger.info('image %d found %d humans from %d annotated, score: %d', k, len(humans), len(anns), avg_score)
 
             import matplotlib.pyplot as plt
             fig = plt.figure()
@@ -153,7 +153,7 @@ if __name__ == '__main__':
 
             plt.show()
 
-    fp = open(write_json, 'w')
+    fp = open(write_json, 'w+')
     json.dump(result, fp)
     fp.close()
 
