@@ -25,12 +25,16 @@ logger.addHandler(ch)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='tf-pose-estimation run by folder')
-    parser.add_argument('--folder', type=str, default='./images/')
-    parser.add_argument('--resolution', type=str, default='432x368', help='network input resolution. default=432x368')
-    parser.add_argument('--model', type=str, default='cmu', help='cmu / mobilenet_thin / mobilenet_v2_large / mobilenet_v2_small')
+    parser.add_argument('--folder', type=str, default='./images/',
+                        help='path to folder with images for inferens')
+    parser.add_argument('--resolution', type=str, default='432x368',
+                        help='network input resolution. default=432x368')
+    parser.add_argument('--model', type=str, default='cmu',
+                        help='cmu / mobilenet_thin / mobilenet_v2_large / mobilenet_v2_small')
     parser.add_argument('--resize-out-ratio', type=float, default=4.0,
-    help='if provided, resize heatmaps before they are post-processed. default=1.0')
-    parser.add_argument('--pb_path', type=str, default='')
+                        help='if provided, resize heatmaps before they are post-processed. default=4.0')
+    parser.add_argument('--pb_path', type=str, default='',
+                        help='if provided, model is loaded from pb file')
 
     args = parser.parse_args()
 
@@ -43,7 +47,7 @@ if __name__ == '__main__':
 
     image_files = []
     path = args.folder
-    valid_images = [".jpg",".gif",".png",".tga"]
+    valid_images = [".jpg", ".gif", ".png", ".tga"]
     for f in os.listdir(path):
         ext = os.path.splitext(f)[1]
         if ext.lower() not in valid_images:
