@@ -123,3 +123,5 @@ data/
 infer/
 models/training/
 tf_pose/pafprocess/pafprocess_wrap.cxx
+eval/
+converted/

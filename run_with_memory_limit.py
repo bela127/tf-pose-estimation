@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from tf_pose.estimator import TfPoseEstimator
 from tf_pose.networks import get_graph_path, model_wh
+import tensorflow as tf
 
 logger = logging.getLogger('TfPoseEstimatorRun')
 logger.handlers.clear()
@@ -29,6 +30,8 @@ if __name__ == '__main__':
                         help='network input resolution. default=432x368')
     parser.add_argument('--resize-out-ratio', type=float, default=4.0,
                         help='if provided, resize heatmaps before they are post-processed. default=4.0')
+    parser.add_argument('--memory_limit', type=float, default=0.3,
+                        help='percent of memory to use. default=0.3')
     parser.add_argument('--pb_path', type=str, default='',
                         help='if provided, model is loaded from pb file')
 
@@ -36,6 +39,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     w, h = model_wh(args.resolution)
+
+    config = tf.ConfigProto(gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=args.memory_limit))
 
     if args.pb_path:
         e = TfPoseEstimator(args.pb_path, target_size=(w, h))

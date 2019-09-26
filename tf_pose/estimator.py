@@ -546,10 +546,12 @@ class TfPoseEstimator:
             npimg = TfPoseEstimator._quantize_img(npimg)
             pass
 
-        logger.debug('inference+ original shape=%dx%d' % (npimg.shape[1], npimg.shape[0]))
+        logger.debug('original shape=%dx%d' % (npimg.shape[1], npimg.shape[0]))
         img = npimg
         if resize_to_default:
             img = self._get_scaled_img(npimg, None)[0][0]
+            
+        logger.debug('inference shape=%dx%d' % (img.shape[1], img.shape[0]))
         peaks, heatMat_up, pafMat_up = self.persistent_sess.run(
             [self.tensor_peaks, self.tensor_heatMat_up, self.tensor_pafMat_up], feed_dict={
                 self.tensor_image: [img], self.upsample_size: upsample_size

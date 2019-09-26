@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from tf_pose.common import read_imgfile
 from tf_pose.estimator import TfPoseEstimator
-from tf_pose.networks import model_wh, get_graph_path
+from tf_pose.networks import get_graph_path, get_network, model_wh, load_variables
 
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
@@ -54,7 +54,10 @@ if __name__ == '__main__':
     parser.add_argument('--coco-dir', type=str, default='/data/public/rw/coco/')
     parser.add_argument('--data-idx', type=int, default=-1)
     parser.add_argument('--multi-scale', type=bool, default=False)
+    parser.add_argument('--pb_path', type=str, default='')
     args = parser.parse_args()
+
+    write_json = './eval/%s_%s_%0.1f.json' % (args.model, args.resize, args.resize_out_ratio)
 
     cocoyear_list = ['2014', '2017']
     if args.cocoyear not in cocoyear_list:
@@ -62,7 +65,6 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     # TODO : Scales
-
     image_dir = args.coco_dir + 'val%s/' % args.cocoyear
     coco_json_file = args.coco_dir + 'annotations/person_keypoints_val%s.json' % args.cocoyear
     cocoGt = COCO(coco_json_file)
@@ -75,12 +77,15 @@ if __name__ == '__main__':
     else:
         keys = [keys[args.data_idx]]
     logger.info('validation %s set size=%d' % (coco_json_file, len(keys)))
-    write_json = '../etcs/%s_%s_%0.1f.json' % (args.model, args.resize, args.resize_out_ratio)
+    
 
     logger.debug('initialization %s : %s' % (args.model, get_graph_path(args.model)))
     w, h = model_wh(args.resize)
 
-    e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
+    if args.pb_path:
+        e = TfPoseEstimator(args.pb_path, target_size=(w, h))
+    else:
+        e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
 
     print('FLOPs: ', e.get_flops())
 
@@ -93,7 +98,7 @@ if __name__ == '__main__':
         img_name = os.path.join(image_dir, img_meta['file_name'])
         image = read_imgfile(img_name, None, None)
         if image is None:
-            logger.error('image not found, path=%s' % img_name)
+            logger.error('image not found, path=%s', img_name)
             sys.exit(-1)
 
         # inference the image with the specified network
@@ -117,7 +122,7 @@ if __name__ == '__main__':
         avg_score = scores / len(humans) if len(humans) > 0 else 0
         tqdm_keys.set_postfix(OrderedDict({'inference time': elapsed, 'score': avg_score}))
         if args.data_idx >= 0:
-            logger.info('score:', k, len(humans), len(anns), avg_score)
+            logger.info('image %d found %d humans from %d annotated, score: %d', k, len(humans), len(anns), avg_score)
 
             import matplotlib.pyplot as plt
             fig = plt.figure()
@@ -148,7 +153,7 @@ if __name__ == '__main__':
 
             plt.show()
 
-    fp = open(write_json, 'w')
+    fp = open(write_json, 'w+')
     json.dump(result, fp)
     fp.close()
 

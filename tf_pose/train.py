@@ -34,20 +34,24 @@ logger.addHandler(ch)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training codes for Openpose using Tensorflow')
-    parser.add_argument('--model', default='mobilenet_v2_1.4', help='model name')
-    parser.add_argument('--datapath', type=str, default='/data/public/rw/coco/annotations')
-    parser.add_argument('--imgpath', type=str, default='/data/public/rw/coco/')
-    parser.add_argument('--batchsize', type=int, default=64)
-    parser.add_argument('--gpus', type=int, default=4)
-    parser.add_argument('--max-epoch', type=int, default=600)
-    parser.add_argument('--lr', type=str, default='0.001')
-    parser.add_argument('--tag', type=str, default='test')
-    parser.add_argument('--checkpoint', type=str, default='')
-    parser.add_argument('--modelpath', type=str, default='./models/train/')
+    parser.add_argument('--model', default='mobilenet_v2_1.4', help='Model architecture name')
+    parser.add_argument('--datapath', type=str, default='/data/public/rw/coco/annotations', help='Path to the "annotations" folder from coco dataset, default "/data/public/rw/coco/annotations"')
+    parser.add_argument('--imgpath', type=str, default='/data/public/rw/coco/', help='Path to the "coco" main folder from coco dataset, default "/data/public/rw/coco"')
+    parser.add_argument('--batchsize', type=int, default=16, help='Batchsize per GPU, default 16')
+    parser.add_argument('--gpus', type=int, default=4, help='Count of GPUs to use, default 4')
+    parser.add_argument('--max-epoch', type=int, default=600, help='Maximum number of epochs to continue training, default 600')
+    parser.add_argument('--lr', type=str, default='0.0001', help='Start lerning rate, default 0.0001')
+    parser.add_argument('--tag', type=str, default='test', help='Tag to append to the models save path, default "test"')
+    parser.add_argument('--checkpoint', type=str, default='', help='Path to checkpoint folder for resuming training from checkpoint, default no checkpoint')
+    parser.add_argument('--modelpath', type=str, default='./models/train/', help='Path to save model checkpoints and summarys, default "./models/train/"')
 
-    parser.add_argument('--input-width', type=int, default=432)
-    parser.add_argument('--input-height', type=int, default=368)
-    parser.add_argument('--quant-delay', type=int, default=-1)
+    parser.add_argument('--input-width', type=int, default=432, help='Image input width for training, default 432')
+    parser.add_argument('--input-height', type=int, default=368, help='Image input height for training, default 368')
+    parser.add_argument('--quant-delay', type=int, default=-1, help='How many steps till quantisation is started, default -1 for no quantisation')
+    parser.add_argument('--max_summarys', type=int, default=100, help='How many checkpoints should be kept, default 100')
+    parser.add_argument('--save_interval', type=int, default=2000, help='How many steps to save a checkpoint and validate the current model, default 2000')
+    parser.add_argument('--log_interval', type=int, default=500, help='How many steps to log statistics from current model, default 500')
+    
     args = parser.parse_args()
 
     modelpath = logpath = args.modelpath
@@ -135,6 +139,7 @@ if __name__ == '__main__':
         total_loss_ll = tf.reduce_sum([total_loss_ll_paf, total_loss_ll_heat])
 
         # define optimizer
+        #TODO hardcodierte datensatz größe
         step_per_epoch = 121745 // (args.batchsize * args.gpus)
         global_step = tf.Variable(0, trainable=False)
         if ',' not in args.lr:
@@ -183,7 +188,7 @@ if __name__ == '__main__':
     valid_loss_ll_t = tf.summary.scalar("loss_valid_lastlayer", valid_loss_ll)
     merged_validate_op = tf.summary.merge([train_img, valid_img, valid_loss_t, valid_loss_ll_t])
 
-    saver = tf.train.Saver(max_to_keep=5000)
+    saver = tf.train.Saver(max_to_keep=args.max_summarys)
     config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
     config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
@@ -192,8 +197,6 @@ if __name__ == '__main__':
 
         if args.checkpoint and os.path.isdir(args.checkpoint):
             logger.info('Restore from checkpoint...')
-            # loader = tf.train.Saver(net.restorable_variables())
-            # loader.restore(sess, tf.train.latest_checkpoint(args.checkpoint))
             saver.restore(sess, tf.train.latest_checkpoint(args.checkpoint))
             logger.info('Restore from checkpoint...Done')
         elif pretrain_path:
@@ -234,7 +237,7 @@ if __name__ == '__main__':
             if gs_num > step_per_epoch * args.max_epoch:
                 break
 
-            if gs_num - last_gs_num >= 500:
+            if gs_num - last_gs_num >= args.log_interval:
                 train_loss, train_loss_ll, train_loss_ll_paf, train_loss_ll_heat, lr_val, summary = sess.run([total_loss, total_loss_ll, total_loss_ll_paf, total_loss_ll_heat, learning_rate, merged_summary_op], 
                     feed_dict={input_node: q_inp_data, vectmap_node: q_vect_data, heatmap_node: q_heat_data}
                 )
@@ -248,7 +251,7 @@ if __name__ == '__main__':
                     file_writer.add_summary(summary, curr_epoch)
                     last_log_epoch1 = curr_epoch
 
-            if gs_num - last_gs_num2 >= 2000:
+            if gs_num - last_gs_num2 >= args.save_interval:
                 # save weights
                 saver.save(sess, os.path.join(modelpath, args.tag, 'model_latest'), global_step=global_step)
 

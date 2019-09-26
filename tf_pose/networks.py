@@ -9,6 +9,10 @@ from tf_pose.network_mobilenet_thin import MobilenetNetworkThin
 from tf_pose.network_cmu import CmuNetwork
 from tf_pose.network_mobilenet_v2 import Mobilenetv2Network
 
+from tf_pose.common import to_str
+import numpy as np
+import sys
+
 
 def _get_base_path():
     if not os.environ.get('OPENPOSE_MODEL', ''):
@@ -126,6 +130,14 @@ def get_network(type, placeholder_input, sess_for_load=None, trainable=True):
 
     return net, pretrain_path_full, last_layer
 
+def get_checkpoint_path(model_name):
+    #TODO transfer path from get network to here
+    model_weights_path = {
+        'mobilenet': 'pretrained/mobilenet_v1_0.75_224_2017_06_14/mobilenet_v1_0.75_224.ckpt',
+        'mobilenet_fast': 'pretrained/mobilenet_v1_0.75_224_2017_06_14/mobilenet_v1_0.75_224.ckpt',
+        'mobilenet_accurate': 'pretrained/mobilenet_v1_1.0_224_2017_06_14/mobilenet_v1_1.0_224.ckpt',
+        'mobilenet_thin': 'pretrained/mobilenet_v1_0.75_224_2017_06_14/mobilenet_v1_0.75_224.ckpt'
+    }
 
 def get_graph_path(model_name):
     dyn_graph_path = {
@@ -139,6 +151,7 @@ def get_graph_path(model_name):
     }
 
     base_data_dir = dirname(dirname(abspath(__file__)))
+    
     if os.path.exists(os.path.join(base_data_dir, 'models')):
         base_data_dir = os.path.join(base_data_dir, 'models')
     else:
@@ -150,6 +163,87 @@ def get_graph_path(model_name):
 
     raise Exception('Graph file doesn\'t exist, path=%s' % graph_path)
 
+def load_variables(sess, net, data_path, logger = None):
+    if os.path.isdir(data_path):
+        if logger:
+            logger.info('Restore from checkpoint... %s' % data_path)
+        else:
+            print('Restore from checkpoint... %s' % data_path)
+
+        data_path = tf.train.latest_checkpoint(data_path)
+    elif '.npy' in data_path:
+        if logger:
+            logger.info('Restore from numpy... %s' % data_path)
+        else:
+            print('Restore from numpy... %s' % data_path)
+    else:
+        if logger:
+            logger.info('Restore from saved Model... %s' % data_path)
+        else:
+            print('Restore from saved Model... %s' % data_path)
+    
+    if '.npy' in data_path:
+        load_from_numpy(sess, net, data_path)
+    else:
+        load_from_tfsafe(sess, net, data_path)
+
+    if logger:
+        logger.info('Restore pretrained weights...Done')
+    else:
+        print('Restore pretrained weights...Done')
+
+def load_from_tfsafe(sess, net, data_path, logger = None):
+    try:
+        loader = tf.train.Saver(net.restorable_variables())
+        loader.restore(sess, data_path)
+    except:
+        if logger:
+            logger.info('Only restoreing weights in backbone layers.')
+        else:
+            print('Only restoreing weights in backbone layers.')
+        loader = tf.train.Saver(net.restorable_variables(only_backbone=True))
+        loader.restore(sess, data_path)
+
+def load_from_numpy(sess, net, data_path, logger = None, ignore_missing=False):
+        '''
+        Load network weights from numpy.
+        data_path: The path to the numpy-serialized network weights
+        session: The current TensorFlow session
+        ignore_missing: If true, serialized weights for missing layers are ignored.
+        '''
+        data_dict = np.load(data_path, allow_pickle=True, encoding='bytes').item()
+        for op_name, param_dict in data_dict.items():
+            if isinstance(data_dict[op_name], np.ndarray):
+                if op_name not in net.restorable_variables():
+                    continue
+                with tf.variable_scope('', reuse=True):
+                    var = tf.get_variable(op_name.replace(':0', ''))
+                    try:
+                        sess.run(var.assign(data_dict[op_name]))
+                    except Exception as ex:
+                        if logger:
+                            logger.error(op_name)
+                            logger.error(ex)
+                        else:
+                            print(op_name)
+                            print(ex)
+                        sys.exit(-1)
+            else:
+                op_name = to_str(op_name)
+                with tf.variable_scope(op_name, reuse=True):
+                    for param_name, data in param_dict.items():
+                        try:
+                            var = tf.get_variable(to_str(param_name))
+                            sess.run(var.assign(data))
+                        except ValueError as ex:
+                            if logger:
+                                logger.error(param_name)
+                                logger.error(ex)
+                            else:
+                                print(param_name)
+                                print(ex)
+                            if not ignore_missing:
+                                raise
 
 def model_wh(resolution_str):
     width, height = map(int, resolution_str.split('x'))
