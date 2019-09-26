@@ -34,6 +34,8 @@ if __name__ == '__main__':
                         help='percent of memory to use. default=0.3')
     parser.add_argument('--pb_path', type=str, default='',
                         help='if provided, model is loaded from pb file')
+    parser.add_argument('--tensor_rt', action='store_true',
+                        help='if provided, model is loaded from pb file')
 
 
     args = parser.parse_args()
@@ -43,9 +45,9 @@ if __name__ == '__main__':
     config = tf.ConfigProto(gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=args.memory_limit))
 
     if args.pb_path:
-        e = TfPoseEstimator(args.pb_path, target_size=(w, h))
+        e = TfPoseEstimator(args.pb_path, target_size=(w, h), trt_bool=args.tensor_rt)
     else:
-        e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
+        e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h), trt_bool=args.tensor_rt)
 
     # estimate human poses from a single image !
     image = common.read_imgfile(args.image, None, None)
