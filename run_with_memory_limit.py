@@ -42,12 +42,15 @@ if __name__ == '__main__':
 
     w, h = model_wh(args.resolution)
 
-    config = tf.ConfigProto(gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=args.memory_limit))
+    config = tf.ConfigProto()
+    config.gpu_options.allocator_type = 'BFC'
+    config.gpu_options.per_process_gpu_memory_fraction = args.memory_limit
+    config.gpu_options.allow_growth = True
 
     if args.pb_path:
-        e = TfPoseEstimator(args.pb_path, target_size=(w, h), trt_bool=args.tensor_rt)
+        e = TfPoseEstimator(args.pb_path, target_size=(w, h), tf_config=config, trt_bool=args.tensor_rt)
     else:
-        e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h), trt_bool=args.tensor_rt)
+        e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h), tf_config=config, trt_bool=args.tensor_rt)
 
     # estimate human poses from a single image !
     image = common.read_imgfile(args.image, None, None)
